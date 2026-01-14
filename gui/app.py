@@ -484,10 +484,101 @@ def create_input_builder_tab():
                 example_protein = gr.Button("Protein Only")
                 example_protein_ligand = gr.Button("Protein + Ligand")
                 example_dimer = gr.Button("Protein Dimer")
-    
+        
+        with gr.Accordion("📂 Batch Converter (Multi-FASTA)", open=False):
+            gr.Markdown("""
+            **Convert a Multi-FASTA file into individual YAML files.**
+            Perfect for preparing batch jobs.
+            """)
+            with gr.Row():
+                batch_fasta = gr.File(label="Upload Multi-FASTA", file_types=[".fasta", ".fa"])
+                batch_type = gr.Dropdown(
+                    label="Entity Type for All Sequences",
+                    choices=["protein", "dna", "rna"],
+                    value="protein"
+                )
+            
+            convert_btn = gr.Button("🔄 Convert to YAML Batch", variant="secondary")
+            batch_output = gr.File(label="Download ZIP", visible=False)
+
     # State to track added sequences
     sequences_state = gr.State([])
     properties_state = gr.State([])
+    
+    def convert_batch_fasta(fasta_file, entity_type):
+        """Convert multi-FASTA to batch of YAMLs."""
+        if not fasta_file:
+            return None
+            
+        import tempfile
+        import zipfile
+        import os
+        from pathlib import Path
+        
+        # Create temp dir
+        tmp_dir = Path(tempfile.mkdtemp())
+        yaml_dir = tmp_dir / "yamls"
+        yaml_dir.mkdir()
+        
+        # Simple FASTA parser
+        content = Path(fasta_file).read_text()
+        entries = []
+        current_header = None
+        current_seq = []
+        
+        def save_entry(header, seq):
+            if not header or not seq:
+                return
+            
+            clean_id = header.split()[0][:20] # Short ID
+            clean_seq = "".join(seq)
+            
+            # Create YAML content
+            entry = {}
+            if entity_type == "protein":
+                entry = create_protein_entry(clean_id, clean_seq)
+            elif entity_type == "dna":
+                entry = create_dna_entry(clean_id, clean_seq)
+            elif entity_type == "rna":
+                entry = create_rna_entry(clean_id, clean_seq)
+                
+            yaml_content = build_yaml([entry])
+            
+            # Save file
+            out_path = yaml_dir / f"{clean_id}.yaml"
+            out_path.write_text(yaml_content)
+            
+        for line in content.splitlines():
+            line = line.strip()
+            if not line: continue
+            if line.startswith(">"):
+                if current_header:
+                    save_entry(current_header, current_seq)
+                current_header = line[1:]
+                current_seq = []
+            else:
+                current_seq.append(line)
+        
+        # Save last entry
+        if current_header:
+            save_entry(current_header, current_seq)
+            
+        # Zip it
+        zip_path = tmp_dir / "batch_yamls.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            for yf in yaml_dir.glob("*.yaml"):
+                zf.write(yf, yf.name)
+                
+        return str(zip_path)
+
+    convert_btn.click(
+        fn=convert_batch_fasta,
+        inputs=[batch_fasta, batch_type],
+        outputs=[batch_output],
+    ).then(
+        fn=lambda: gr.update(visible=True),
+        outputs=[batch_output]
+    )
     
     def toggle_ligand_fields(entity_type):
         """Show/hide ligand-specific fields."""
