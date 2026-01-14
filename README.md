@@ -69,6 +69,16 @@ The GUI will automatically open in your browser at `http://localhost:7860`.
 | 📊 **Results** | Analyze confidence scores and affinity from any folder |
 | 📚 **Help** | Documentation, examples, troubleshooting |
 
+## 🔥 Batch Processing
+
+You can run predictions on multiple structures at once:
+
+1. Go to the **Quick Start** tab.
+2. Drag & Drop **multiple YAML or FASTA files** (e.g., 50 files) into the upload box.
+3. Click **Run Prediction**.
+
+The GUI will automatically create a batch job and process all files sequentially.
+
 ## Tips for Beginners
 
 1. Start with the **Quick Start** tab
