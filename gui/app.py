@@ -807,7 +807,7 @@ def create_advanced_settings_tab():
                 
                 command_preview = gr.Code(
                     label="Generated Command",
-                    language="bash",
+                    language="shell",
                     lines=10,
                 )
                 
@@ -944,7 +944,269 @@ def create_advanced_settings_tab():
 
 
 # ============================================================================
-# TAB 4: HELP
+# TAB 4: RESULTS
+# ============================================================================
+
+def create_results_tab():
+    """Create the Results tab with Mol* viewer and confidence display."""
+    
+    with gr.Column():
+        gr.Markdown("""
+        ## 📊 Results Viewer
+        
+        View prediction results with 3D structure visualization and confidence scores.
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                gr.Markdown("### 📁 Load Results")
+                
+                results_dir = gr.Textbox(
+                    label="Results Directory",
+                    placeholder="Path to prediction output folder...",
+                    value="",
+                )
+                
+                load_button = gr.Button("🔍 Load Results", variant="primary")
+                
+                gr.Markdown("---")
+                
+                prediction_dropdown = gr.Dropdown(
+                    label="Select Prediction",
+                    choices=[],
+                    interactive=True,
+                )
+                
+                model_dropdown = gr.Dropdown(
+                    label="Select Model",
+                    choices=[],
+                    interactive=True,
+                )
+                
+                load_status = gr.Markdown("")
+            
+            with gr.Column(scale=2):
+                gr.Markdown("### 📈 Confidence Scores")
+                
+                confidence_display = gr.Markdown("""
+                *Load a prediction to see confidence scores*
+                """)
+                
+                affinity_display = gr.Markdown("")
+        
+        gr.Markdown("---")
+        
+        gr.Markdown("### 🔬 3D Structure Viewer (Mol*)")
+        
+        # Mol* viewer embedded via iframe
+        molstar_html = gr.HTML(
+            value="""
+            <div style="width: 100%; height: 500px; border: 1px solid #ccc; border-radius: 8px; 
+                        display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+                <p style="color: #666; font-size: 16px;">
+                    🔬 Load a prediction to view the 3D structure
+                </p>
+            </div>
+            """,
+            label="Mol* Viewer",
+        )
+        
+        with gr.Row():
+            download_cif = gr.File(label="📥 Download Structure", visible=False)
+            download_json = gr.File(label="📥 Download Confidence", visible=False)
+    
+    # State for tracking loaded files
+    results_state = gr.State({})
+    
+    def scan_results_dir(dir_path):
+        """Scan a directory for prediction results."""
+        import os
+        import glob
+        
+        if not dir_path or not os.path.exists(dir_path):
+            return gr.update(choices=[]), gr.update(choices=[]), {}, "❌ Directory not found"
+        
+        # Look for predictions folder
+        predictions_path = os.path.join(dir_path, "predictions")
+        if os.path.exists(predictions_path):
+            search_path = predictions_path
+        else:
+            search_path = dir_path
+        
+        # Find prediction subdirectories
+        predictions = []
+        results = {}
+        
+        for item in os.listdir(search_path):
+            item_path = os.path.join(search_path, item)
+            if os.path.isdir(item_path):
+                # Check if it contains prediction files
+                cif_files = glob.glob(os.path.join(item_path, "*_model_*.cif"))
+                pdb_files = glob.glob(os.path.join(item_path, "*_model_*.pdb"))
+                
+                if cif_files or pdb_files:
+                    predictions.append(item)
+                    results[item] = {
+                        "path": item_path,
+                        "structures": cif_files + pdb_files,
+                        "confidence": glob.glob(os.path.join(item_path, "confidence_*.json")),
+                        "affinity": glob.glob(os.path.join(item_path, "affinity_*.json")),
+                    }
+        
+        if not predictions:
+            return gr.update(choices=[]), gr.update(choices=[]), {}, "❌ No predictions found in this directory"
+        
+        return (
+            gr.update(choices=predictions, value=predictions[0]),
+            gr.update(choices=[]),
+            results,
+            f"✅ Found {len(predictions)} prediction(s)"
+        )
+    
+    def load_prediction(prediction_name, results):
+        """Load a specific prediction."""
+        import os
+        
+        if not prediction_name or prediction_name not in results:
+            return gr.update(choices=[]), "", "", gr.update(), gr.update(visible=False), gr.update(visible=False)
+        
+        pred_data = results[prediction_name]
+        structures = pred_data["structures"]
+        
+        # Get model names
+        model_names = []
+        for s in structures:
+            basename = os.path.basename(s)
+            model_names.append(basename)
+        
+        # Load confidence
+        confidence_md = ""
+        if pred_data["confidence"]:
+            try:
+                import json
+                with open(pred_data["confidence"][0], 'r') as f:
+                    conf = json.load(f)
+                
+                # Format confidence scores nicely
+                score = conf.get("confidence_score", 0)
+                quality = "🟢 Excellent" if score > 0.9 else "🟡 Good" if score > 0.7 else "🟠 Moderate" if score > 0.5 else "🔴 Low"
+                
+                confidence_md = f"""
+| Metric | Value | Quality |
+|--------|-------|---------|
+| **Confidence Score** | {score:.3f} | {quality} |
+| **pLDDT** | {conf.get('complex_plddt', 0):.3f} | Per-residue confidence |
+| **pTM** | {conf.get('ptm', 0):.3f} | Fold accuracy |
+| **ipTM** | {conf.get('iptm', 0):.3f} | Interface accuracy |
+| **Ligand ipTM** | {conf.get('ligand_iptm', 0):.3f} | Protein-ligand interface |
+"""
+            except Exception as e:
+                confidence_md = f"Error loading confidence: {str(e)}"
+        
+        # Load affinity
+        affinity_md = ""
+        if pred_data["affinity"]:
+            try:
+                import json
+                with open(pred_data["affinity"][0], 'r') as f:
+                    aff = json.load(f)
+                
+                affinity_md = f"""
+### 🎯 Affinity Prediction
+
+| Metric | Value | Interpretation |
+|--------|-------|----------------|
+| **Binding Probability** | {aff.get('affinity_probability_binary', 0):.3f} | {'>0.5 = likely binder' if aff.get('affinity_probability_binary', 0) > 0.5 else '<0.5 = likely non-binder'} |
+| **Affinity Value** | {aff.get('affinity_pred_value', 0):.3f} | log10(IC50 in μM) |
+"""
+            except Exception as e:
+                affinity_md = f"Error loading affinity: {str(e)}"
+        
+        return (
+            gr.update(choices=model_names, value=model_names[0] if model_names else None),
+            confidence_md,
+            affinity_md,
+            gr.update(),  # molstar_html updated separately
+            gr.update(value=pred_data["confidence"][0] if pred_data["confidence"] else None, visible=bool(pred_data["confidence"])),
+            gr.update(visible=False),
+        )
+    
+    def load_structure_viewer(model_name, prediction_name, results):
+        """Load the 3D structure in Mol* viewer."""
+        import os
+        import base64
+        
+        if not model_name or not prediction_name or prediction_name not in results:
+            return """
+            <div style="width: 100%; height: 500px; border: 1px solid #ccc; border-radius: 8px; 
+                        display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+                <p style="color: #666;">Select a model to view</p>
+            </div>
+            """, gr.update(visible=False)
+        
+        pred_data = results[prediction_name]
+        
+        # Find the structure file
+        structure_file = None
+        for s in pred_data["structures"]:
+            if os.path.basename(s) == model_name:
+                structure_file = s
+                break
+        
+        if not structure_file or not os.path.exists(structure_file):
+            return """
+            <div style="width: 100%; height: 500px; border: 1px solid #ccc; border-radius: 8px; 
+                        display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
+                <p style="color: #c00;">Structure file not found</p>
+            </div>
+            """, gr.update(visible=False)
+        
+        # Read and encode the structure file
+        with open(structure_file, 'r') as f:
+            structure_data = f.read()
+        
+        structure_b64 = base64.b64encode(structure_data.encode()).decode()
+        file_format = "mmcif" if structure_file.endswith(".cif") else "pdb"
+        
+        # Create Mol* viewer HTML with embedded structure
+        molstar_html = f"""
+        <div id="molstar-container" style="width: 100%; height: 500px; position: relative; border-radius: 8px; overflow: hidden;">
+            <iframe 
+                src="https://molstar.org/viewer/?structure-url=data:text/plain;base64,{structure_b64}&structure-url-format={file_format}"
+                style="width: 100%; height: 100%; border: none;"
+                allow="fullscreen"
+            ></iframe>
+        </div>
+        <p style="text-align: center; color: #666; margin-top: 8px; font-size: 12px;">
+            🔍 Use mouse to rotate, scroll to zoom. Right-click for more options.
+        </p>
+        """
+        
+        return molstar_html, gr.update(value=structure_file, visible=True)
+    
+    load_button.click(
+        fn=scan_results_dir,
+        inputs=[results_dir],
+        outputs=[prediction_dropdown, model_dropdown, results_state, load_status],
+    )
+    
+    prediction_dropdown.change(
+        fn=load_prediction,
+        inputs=[prediction_dropdown, results_state],
+        outputs=[model_dropdown, confidence_display, affinity_display, molstar_html, download_json, download_cif],
+    )
+    
+    model_dropdown.change(
+        fn=load_structure_viewer,
+        inputs=[model_dropdown, prediction_dropdown, results_state],
+        outputs=[molstar_html, download_cif],
+    )
+    
+    return results_dir
+
+
+# ============================================================================
+# TAB 5: HELP
 # ============================================================================
 
 def create_help_tab():
@@ -1093,6 +1355,9 @@ def create_app():
             
             with gr.Tab("⚙️ Advanced Settings"):
                 create_advanced_settings_tab()
+            
+            with gr.Tab("📊 Results"):
+                create_results_tab()
             
             with gr.Tab("📚 Help"):
                 create_help_tab()
