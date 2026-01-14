@@ -4,31 +4,51 @@ A user-friendly graphical interface for running Boltz-2 predictions locally.
 
 ## 📦 Installation & Setup
 
-**Already have Boltz installed?** You're 99% there!
+Follow these steps to set up Boltz-2 and the GUI from scratch.
 
-1. **Activate your Boltz environment:**
+### 1. Clone the Repository
 
-   ```bash
-   conda activate boltz
-   ```
+```bash
+git clone https://github.com/basicallynabbo/boltz2-gui.git
+cd boltz2-gui
+```
 
-2. **Install the GUI dependency:**
+### 2. Create Conda Environment
 
-   ```bash
-   pip install gradio
-   ```
+Boltz requires Python 3.10, 3.11, or 3.12 (Python 3.13+ is not supported).
 
-3. **Launch the App:**
+```bash
+conda create -n boltz python=3.12
+conda activate boltz
+```
 
-   ```bash
-   python run_gui.py
-   ```
+### 3. Install Boltz-2
+
+Install the package in editable mode:
+
+```bash
+pip install -e .
+```
+
+### 4. Install GUI Requirements
+
+Install Gradio for the user interface:
+
+```bash
+pip install gradio
+```
+
+### 5. Run the GUI
+
+Launch the application:
+
+```bash
+python run_gui.py
+```
 
 The GUI will automatically open in your browser at `http://localhost:7860`.
 
 ---
-
-## Alternative Launch Methods
 
 ## Features
 
@@ -37,6 +57,7 @@ The GUI will automatically open in your browser at `http://localhost:7860`.
 | 🚀 **Quick Start** | Upload file → Select preset → Click Run! |
 | 🔧 **Input Builder** | Create YAML files visually without coding |
 | ⚙️ **Advanced Settings** | Access all 25+ prediction parameters |
+| 📊 **Results** | Analyze confidence scores and affinity from any folder |
 | 📚 **Help** | Documentation, examples, troubleshooting |
 
 ## Tips for Beginners
