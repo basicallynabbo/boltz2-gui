@@ -959,8 +959,9 @@ def create_results_tab():
         
         results_dir = gr.Textbox(
             label="📁 Output Folder Path",
-            placeholder="/home/nabbo/Documents/boltz_results_tmpl_034e7u",
+            placeholder="/path/to/your/results_directory",
             value="",
+            info="Enter the path to the folder containing your Boltz predictions (e.g. ./predictions)",
         )
         
         analyze_btn = gr.Button("🔍 Analyze Results", variant="primary", size="lg")
