@@ -79,6 +79,15 @@ You can run predictions on multiple structures at once:
 
 The GUI will automatically create a batch job and process all files sequentially.
 
+### 🛠️ Batch Input Generation
+
+Need to run 100 predictions? You don't need to create YAMLs manually.
+
+1. Go to **Input Builder** > **Batch Converter**.
+2. Upload a **Multi-FASTA** file (e.g., one file with 100 sequences).
+3. Click **Convert to YAML Batch**.
+4. Download the **ZIP file**, extract it, and use the contents in **Quick Start**.
+
 ## Tips for Beginners
 
 1. Start with the **Quick Start** tab
