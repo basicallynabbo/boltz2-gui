@@ -228,9 +228,10 @@ def create_quick_start_tab():
         with gr.Row():
             with gr.Column(scale=2):
                 input_file = gr.File(
-                    label="📁 Input File",
+                    label="📁 Input File(s) - Drag multiple for Batch Mode",
                     file_types=[".yaml", ".yml", ".fasta", ".fa"],
                     type="filepath",
+                    file_count="multiple",
                 )
                 
                 output_dir = gr.Textbox(
@@ -279,6 +280,7 @@ def create_quick_start_tab():
                 gr.Markdown("""
                 ### 💡 Tips for Beginners
                 
+                - **Upload multiple files** to run a batch job
                 - **YAML format** is recommended over FASTA
                 - Enable **MSA Server** for automatic alignments
                 - **Potentials** improve structure quality
@@ -298,10 +300,38 @@ def create_quick_start_tab():
         # Add timer for updating output
         timer = gr.Timer(value=1, active=False)
     
-    def run_prediction(input_file, output_dir, use_msa, use_potentials, preset):
+    def run_prediction(input_files, output_dir, use_msa, use_potentials, preset):
         """Run a prediction with Quick Start settings."""
-        if not input_file:
-            return "**Status:** ❌ Please upload an input file", "", gr.update(active=False)
+        if not input_files:
+            return "**Status:** ❌ Please upload input file(s)", "", gr.update(active=False)
+        
+        # Handle Batch Processing
+        import os
+        import shutil
+        import tempfile
+        
+        target_input = ""
+        is_batch = False
+        batch_msg = ""
+        
+        # Check if input_files is a list (Batch Mode) or single string
+        if isinstance(input_files, list):
+            if len(input_files) == 1:
+                target_input = input_files[0]
+            else:
+                is_batch = True
+                # Create a temporary directory for the batch
+                batch_dir = tempfile.mkdtemp(prefix="boltz_batch_")
+                for fpath in input_files:
+                    try:
+                        shutil.copy(fpath, batch_dir)
+                    except Exception as e:
+                        print(f"Error copying {fpath}: {e}")
+                
+                target_input = batch_dir
+                batch_msg = f" (Batch of {len(input_files)} inputs)"
+        else:
+            target_input = input_files
         
         # Get preset settings
         preset_settings = PRESETS.get(preset, PRESETS["balanced"])["settings"].copy()
@@ -316,14 +346,14 @@ def create_quick_start_tab():
                 preset_settings[key] = value
         
         # Build command
-        cmd = get_boltz_command(input_file, output_dir, preset_settings)
+        cmd = get_boltz_command(target_input, output_dir, preset_settings)
         
         # Start prediction
         runner.run(cmd)
         
         cmd_str = ' '.join(cmd)
         return (
-            "**Status:** 🔄 Running...",
+            f"**Status:** 🔄 Running{batch_msg}...",
             f"$ {cmd_str}\n\n",
             gr.update(active=True),
         )
