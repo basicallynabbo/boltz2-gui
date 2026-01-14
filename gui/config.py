@@ -46,41 +46,45 @@ DEFAULTS = {
 PRESETS = {
     "fast": {
         "name": "⚡ Fast",
-        "description": "Quick test run - lower quality but faster",
+        "description": "Quick test (1 rec, 50 samp, 1 diff)",
         "settings": {
             "recycling_steps": 1,
             "sampling_steps": 50,
             "diffusion_samples": 1,
+            "step_scale": 1.638,
             "use_potentials": False,
         }
     },
     "balanced": {
-        "name": "⚖️ Balanced (Recommended)",
-        "description": "Good balance between speed and quality",
+        "name": "⚖️ Balanced",
+        "description": "Boltz Recommended (3 rec, 200 samp, 1 diff)",
         "settings": {
             "recycling_steps": 3,
             "sampling_steps": 200,
             "diffusion_samples": 1,
+            "step_scale": 1.638,
             "use_potentials": True,
         }
     },
     "high_quality": {
         "name": "🎯 High Quality",
-        "description": "Best quality - slower but more accurate",
+        "description": "Recommended + Robust (3 rec, 200 samp, 5 diff)",
         "settings": {
-            "recycling_steps": 10,
+            "recycling_steps": 3,
             "sampling_steps": 200,
             "diffusion_samples": 5,
+            "step_scale": 1.638,
             "use_potentials": True,
         }
     },
     "alphafold3_like": {
         "name": "🔬 AlphaFold3-like",
-        "description": "Similar parameters to AlphaFold3 (10 recycling, 25 samples)",
+        "description": "Deep sampling (10 rec, 200 samp, 25 diff)",
         "settings": {
             "recycling_steps": 10,
             "sampling_steps": 200,
             "diffusion_samples": 25,
+            "step_scale": 1.638,
             "use_potentials": True,
         }
     },

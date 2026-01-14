@@ -2,38 +2,33 @@
 
 A user-friendly graphical interface for running Boltz-2 predictions locally.
 
-## 🚀 Quick Launch
+## 📦 Installation & Setup
 
-```bash
-# Make sure you're in the boltz directory and conda environment is active
-conda activate boltz
+**Already have Boltz installed?** You're 99% there!
 
-# Launch the GUI
-python run_gui.py
-```
+1. **Activate your Boltz environment:**
 
-The GUI will automatically open in your browser at `http://localhost:7860`
+   ```bash
+   conda activate boltz
+   ```
+
+2. **Install the GUI dependency:**
+
+   ```bash
+   pip install gradio
+   ```
+
+3. **Launch the App:**
+
+   ```bash
+   python run_gui.py
+   ```
+
+The GUI will automatically open in your browser at `http://localhost:7860`.
+
+---
 
 ## Alternative Launch Methods
-
-```bash
-# From the boltz root directory:
-python -m gui.app
-
-# Or directly:
-python gui/app.py
-```
-
-## Requirements
-
-- Python 3.10-3.12
-- Gradio (installed automatically with boltz)
-
-If Gradio is not installed:
-
-```bash
-pip install gradio
-```
 
 ## Features
 
@@ -50,6 +45,23 @@ pip install gradio
 2. Enable **"Use MSA Server"** for automatic sequence alignments
 3. Enable **"Use Potentials"** for better structure quality
 4. Use the **"Balanced"** preset for most cases
+
+## Technical Details: Quality Presets
+
+The GUI provides four carefully tuned presets for different use cases:
+
+| Preset | Description | Recycling Loop | Diffusion Samples | Sampling Steps | Step Scale |
+|--------|-------------|----------------|-------------------|----------------|------------|
+| **⚡ Fast** | Quick sanity checks | 1 | 1 | 50 | 1.638 |
+| **⚖️ Balanced** | **Boltz Recommended** Defaults | 3 | 1 | 200 | 1.638 |
+| **🎯 High Quality** | Recommended settings with **5x more samples** | 3 | 5 | 200 | 1.638 |
+| **🔬 AlphaFold3-like** | Heavy sampling (mimics AF3 params) | 10 | 25 | 200 | 1.638 |
+
+**Notes:**
+
+- **Step Scale 1.638**: The officially recommended temperature for diffusion sampling.
+- **Balanced**: Uses the exact default parameters recommended by the Boltz authors.
+- **High Quality**: Increases robustness by generating 5 distinct diffusion samples and picking the best one (by confidence), without changing the underlying model parameters.
 
 ## Stopping the GUI
 

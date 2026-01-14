@@ -253,10 +253,10 @@ def create_quick_start_tab():
                 
                 preset_dropdown = gr.Dropdown(
                     choices=[
-                        ("⚡ Fast - Quick test run", "fast"),
-                        ("⚖️ Balanced (Recommended)", "balanced"),
-                        ("🎯 High Quality - Best accuracy", "high_quality"),
-                        ("🔬 AlphaFold3-like - 10 recycling, 25 samples", "alphafold3_like"),
+                        ("⚡ Fast - Quick test (1 rec, 50 samp, 1 diff)", "fast"),
+                        ("⚖️ Balanced - Boltz Recommended (3 rec, 200 samp, 1 diff)", "balanced"),
+                        ("🎯 High Quality - Recommended + Robust (3 rec, 200 samp, 5 diff)", "high_quality"),
+                        ("🔬 AlphaFold3-like - Deep sampling (10 rec, 200 samp, 25 diff)", "alphafold3_like"),
                     ],
                     value="balanced",
                     label="🎚️ Quality Preset",
@@ -948,258 +948,138 @@ def create_advanced_settings_tab():
 # ============================================================================
 
 def create_results_tab():
-    """Create the Results tab with Mol* viewer and confidence display."""
+    """Create a simple Results tab for analyzing confidence and affinity scores."""
     
     with gr.Column():
         gr.Markdown("""
-        ## 📊 Results Viewer
+        ## 📊 Results Analyzer
         
-        View prediction results with 3D structure visualization and confidence scores.
+        Paste your output folder path to see confidence scores and affinity predictions.
         """)
         
-        with gr.Row():
-            with gr.Column(scale=1):
-                gr.Markdown("### 📁 Load Results")
-                
-                results_dir = gr.Textbox(
-                    label="Results Directory",
-                    placeholder="Path to prediction output folder...",
-                    value="",
-                )
-                
-                load_button = gr.Button("🔍 Load Results", variant="primary")
-                
-                gr.Markdown("---")
-                
-                prediction_dropdown = gr.Dropdown(
-                    label="Select Prediction",
-                    choices=[],
-                    interactive=True,
-                )
-                
-                model_dropdown = gr.Dropdown(
-                    label="Select Model",
-                    choices=[],
-                    interactive=True,
-                )
-                
-                load_status = gr.Markdown("")
-            
-            with gr.Column(scale=2):
-                gr.Markdown("### 📈 Confidence Scores")
-                
-                confidence_display = gr.Markdown("""
-                *Load a prediction to see confidence scores*
-                """)
-                
-                affinity_display = gr.Markdown("")
-        
-        gr.Markdown("---")
-        
-        gr.Markdown("### 🔬 3D Structure Viewer (Mol*)")
-        
-        # Mol* viewer embedded via iframe
-        molstar_html = gr.HTML(
-            value="""
-            <div style="width: 100%; height: 500px; border: 1px solid #ccc; border-radius: 8px; 
-                        display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
-                <p style="color: #666; font-size: 16px;">
-                    🔬 Load a prediction to view the 3D structure
-                </p>
-            </div>
-            """,
-            label="Mol* Viewer",
+        results_dir = gr.Textbox(
+            label="📁 Output Folder Path",
+            placeholder="/home/nabbo/Documents/boltz_results_tmpl_034e7u",
+            value="",
         )
         
-        with gr.Row():
-            download_cif = gr.File(label="📥 Download Structure", visible=False)
-            download_json = gr.File(label="📥 Download Confidence", visible=False)
+        analyze_btn = gr.Button("🔍 Analyze Results", variant="primary", size="lg")
+        
+        results_output = gr.Markdown("*Paste your output folder path and click Analyze*")
     
-    # State for tracking loaded files
-    results_state = gr.State({})
-    
-    def scan_results_dir(dir_path):
-        """Scan a directory for prediction results."""
+    def analyze_results(folder_path):
+        """Analyze prediction results from a folder."""
         import os
+        import json
         import glob
         
-        if not dir_path or not os.path.exists(dir_path):
-            return gr.update(choices=[]), gr.update(choices=[]), {}, "❌ Directory not found"
+        if not folder_path:
+            return "❌ Please enter a folder path"
+        
+        # Expand ~ to home directory
+        folder_path = os.path.expanduser(folder_path)
+        
+        if not os.path.exists(folder_path):
+            return f"❌ Folder not found: `{folder_path}`"
         
         # Look for predictions folder
-        predictions_path = os.path.join(dir_path, "predictions")
+        predictions_path = os.path.join(folder_path, "predictions")
         if os.path.exists(predictions_path):
             search_path = predictions_path
         else:
-            search_path = dir_path
+            search_path = folder_path
         
-        # Find prediction subdirectories
-        predictions = []
-        results = {}
+        # Find all prediction subdirectories
+        results_md = ""
+        prediction_count = 0
         
-        for item in os.listdir(search_path):
-            item_path = os.path.join(search_path, item)
-            if os.path.isdir(item_path):
-                # Check if it contains prediction files
-                cif_files = glob.glob(os.path.join(item_path, "*_model_*.cif"))
-                pdb_files = glob.glob(os.path.join(item_path, "*_model_*.pdb"))
-                
-                if cif_files or pdb_files:
-                    predictions.append(item)
-                    results[item] = {
-                        "path": item_path,
-                        "structures": cif_files + pdb_files,
-                        "confidence": glob.glob(os.path.join(item_path, "confidence_*.json")),
-                        "affinity": glob.glob(os.path.join(item_path, "affinity_*.json")),
-                    }
+        # Check subdirectories
+        dirs_to_check = []
+        if os.path.isdir(search_path):
+            for item in os.listdir(search_path):
+                item_path = os.path.join(search_path, item)
+                if os.path.isdir(item_path):
+                    dirs_to_check.append((item, item_path))
         
-        if not predictions:
-            return gr.update(choices=[]), gr.update(choices=[]), {}, "❌ No predictions found in this directory"
+        # If no subdirs, check the path itself
+        if not dirs_to_check:
+            dirs_to_check = [(os.path.basename(search_path), search_path)]
         
-        return (
-            gr.update(choices=predictions, value=predictions[0]),
-            gr.update(choices=[]),
-            results,
-            f"✅ Found {len(predictions)} prediction(s)"
-        )
-    
-    def load_prediction(prediction_name, results):
-        """Load a specific prediction."""
-        import os
-        
-        if not prediction_name or prediction_name not in results:
-            return gr.update(choices=[]), "", "", gr.update(), gr.update(visible=False), gr.update(visible=False)
-        
-        pred_data = results[prediction_name]
-        structures = pred_data["structures"]
-        
-        # Get model names
-        model_names = []
-        for s in structures:
-            basename = os.path.basename(s)
-            model_names.append(basename)
-        
-        # Load confidence
-        confidence_md = ""
-        if pred_data["confidence"]:
-            try:
-                import json
-                with open(pred_data["confidence"][0], 'r') as f:
-                    conf = json.load(f)
-                
-                # Format confidence scores nicely
-                score = conf.get("confidence_score", 0)
-                quality = "🟢 Excellent" if score > 0.9 else "🟡 Good" if score > 0.7 else "🟠 Moderate" if score > 0.5 else "🔴 Low"
-                
-                confidence_md = f"""
-| Metric | Value | Quality |
-|--------|-------|---------|
-| **Confidence Score** | {score:.3f} | {quality} |
+        for pred_name, pred_path in dirs_to_check:
+            # Find confidence files
+            conf_files = glob.glob(os.path.join(pred_path, "confidence_*.json"))
+            aff_files = glob.glob(os.path.join(pred_path, "affinity_*.json"))
+            structure_files = glob.glob(os.path.join(pred_path, "*_model_*.cif")) + glob.glob(os.path.join(pred_path, "*_model_*.pdb"))
+            
+            if not conf_files and not structure_files:
+                continue
+            
+            prediction_count += 1
+            results_md += f"\n---\n\n## 🧬 Prediction: `{pred_name}`\n\n"
+            
+            # Structure files info
+            if structure_files:
+                results_md += f"**📁 Structure files:** {len(structure_files)} model(s)\n\n"
+            
+            # Parse confidence scores
+            for conf_file in conf_files:
+                try:
+                    with open(conf_file, 'r') as f:
+                        conf = json.load(f)
+                    
+                    score = conf.get("confidence_score", 0)
+                    if score > 0.9:
+                        quality = "🟢 Excellent"
+                    elif score > 0.7:
+                        quality = "🟡 Good"  
+                    elif score > 0.5:
+                        quality = "🟠 Moderate"
+                    else:
+                        quality = "🔴 Low"
+                    
+                    results_md += f"""### 📈 Confidence Scores
+
+| Metric | Value | Interpretation |
+|--------|-------|----------------|
+| **Overall Confidence** | {score:.3f} | {quality} |
 | **pLDDT** | {conf.get('complex_plddt', 0):.3f} | Per-residue confidence |
 | **pTM** | {conf.get('ptm', 0):.3f} | Fold accuracy |
 | **ipTM** | {conf.get('iptm', 0):.3f} | Interface accuracy |
 | **Ligand ipTM** | {conf.get('ligand_iptm', 0):.3f} | Protein-ligand interface |
+
 """
-            except Exception as e:
-                confidence_md = f"Error loading confidence: {str(e)}"
-        
-        # Load affinity
-        affinity_md = ""
-        if pred_data["affinity"]:
-            try:
-                import json
-                with open(pred_data["affinity"][0], 'r') as f:
-                    aff = json.load(f)
-                
-                affinity_md = f"""
-### 🎯 Affinity Prediction
+                except Exception as e:
+                    results_md += f"⚠️ Error reading confidence: {str(e)}\n\n"
+            
+            # Parse affinity scores
+            for aff_file in aff_files:
+                try:
+                    with open(aff_file, 'r') as f:
+                        aff = json.load(f)
+                    
+                    prob = aff.get("affinity_probability_binary", 0)
+                    binding = "✅ Likely binder" if prob > 0.5 else "❌ Likely non-binder"
+                    
+                    results_md += f"""### 🎯 Affinity Prediction
 
 | Metric | Value | Interpretation |
 |--------|-------|----------------|
-| **Binding Probability** | {aff.get('affinity_probability_binary', 0):.3f} | {'>0.5 = likely binder' if aff.get('affinity_probability_binary', 0) > 0.5 else '<0.5 = likely non-binder'} |
-| **Affinity Value** | {aff.get('affinity_pred_value', 0):.3f} | log10(IC50 in μM) |
+| **Binding Probability** | {prob:.3f} | {binding} |
+| **Affinity (pIC50)** | {aff.get('affinity_pred_value', 0):.3f} | Higher = stronger binding |
+
 """
-            except Exception as e:
-                affinity_md = f"Error loading affinity: {str(e)}"
+                except Exception as e:
+                    results_md += f"⚠️ Error reading affinity: {str(e)}\n\n"
         
-        return (
-            gr.update(choices=model_names, value=model_names[0] if model_names else None),
-            confidence_md,
-            affinity_md,
-            gr.update(),  # molstar_html updated separately
-            gr.update(value=pred_data["confidence"][0] if pred_data["confidence"] else None, visible=bool(pred_data["confidence"])),
-            gr.update(visible=False),
-        )
+        if prediction_count == 0:
+            return f"❌ No predictions found in `{folder_path}`\n\nMake sure the folder contains a `predictions/` subdirectory."
+        
+        return f"# ✅ Found {prediction_count} prediction(s)\n" + results_md
     
-    def load_structure_viewer(model_name, prediction_name, results):
-        """Load the 3D structure in Mol* viewer."""
-        import os
-        import base64
-        
-        if not model_name or not prediction_name or prediction_name not in results:
-            return """
-            <div style="width: 100%; height: 500px; border: 1px solid #ccc; border-radius: 8px; 
-                        display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
-                <p style="color: #666;">Select a model to view</p>
-            </div>
-            """, gr.update(visible=False)
-        
-        pred_data = results[prediction_name]
-        
-        # Find the structure file
-        structure_file = None
-        for s in pred_data["structures"]:
-            if os.path.basename(s) == model_name:
-                structure_file = s
-                break
-        
-        if not structure_file or not os.path.exists(structure_file):
-            return """
-            <div style="width: 100%; height: 500px; border: 1px solid #ccc; border-radius: 8px; 
-                        display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
-                <p style="color: #c00;">Structure file not found</p>
-            </div>
-            """, gr.update(visible=False)
-        
-        # Read and encode the structure file
-        with open(structure_file, 'r') as f:
-            structure_data = f.read()
-        
-        structure_b64 = base64.b64encode(structure_data.encode()).decode()
-        file_format = "mmcif" if structure_file.endswith(".cif") else "pdb"
-        
-        # Create Mol* viewer HTML with embedded structure
-        molstar_html = f"""
-        <div id="molstar-container" style="width: 100%; height: 500px; position: relative; border-radius: 8px; overflow: hidden;">
-            <iframe 
-                src="https://molstar.org/viewer/?structure-url=data:text/plain;base64,{structure_b64}&structure-url-format={file_format}"
-                style="width: 100%; height: 100%; border: none;"
-                allow="fullscreen"
-            ></iframe>
-        </div>
-        <p style="text-align: center; color: #666; margin-top: 8px; font-size: 12px;">
-            🔍 Use mouse to rotate, scroll to zoom. Right-click for more options.
-        </p>
-        """
-        
-        return molstar_html, gr.update(value=structure_file, visible=True)
-    
-    load_button.click(
-        fn=scan_results_dir,
+    analyze_btn.click(
+        fn=analyze_results,
         inputs=[results_dir],
-        outputs=[prediction_dropdown, model_dropdown, results_state, load_status],
-    )
-    
-    prediction_dropdown.change(
-        fn=load_prediction,
-        inputs=[prediction_dropdown, results_state],
-        outputs=[model_dropdown, confidence_display, affinity_display, molstar_html, download_json, download_cif],
-    )
-    
-    model_dropdown.change(
-        fn=load_structure_viewer,
-        inputs=[model_dropdown, prediction_dropdown, results_state],
-        outputs=[molstar_html, download_cif],
+        outputs=[results_output],
     )
     
     return results_dir
@@ -1332,19 +1212,146 @@ def create_help_tab():
 # MAIN APPLICATION
 # ============================================================================
 
+# ============================================================================
+# MAIN APPLICATION
+# ============================================================================
+
 def create_app():
     """Create the main Gradio application."""
     
+    # Custom CSS for that "YC Startup" look
+    yc_css = """
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    body {
+        font-family: 'Inter', sans-serif !important;
+        background-color: #f8fafc;
+    }
+    
+    .gradio-container {
+        max-width: 1200px !important;
+        margin: 0 auto;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Inter', sans-serif;
+        letter-spacing: -0.025em;
+    }
+    
+    /* Elegant Cards */
+    .block {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.01), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        background: white;
+        overflow: hidden;
+    }
+    
+    /* Clean Buttons */
+    button.primary {
+        background: #0f172a !important; /* Slate 900 */
+        color: white !important;
+        border-radius: 8px !important;
+        font-weight: 500;
+        transition: all 0.2s;
+        border: none !important;
+    }
+    button.primary:hover {
+        background: #1e293b !important; /* Slate 800 */
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    
+    button.secondary {
+        background: white !important;
+        border: 1px solid #e2e8f0 !important;
+        color: #475569 !important; /* Slate 600 */
+        border-radius: 8px !important;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    button.secondary:hover {
+        background: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+    }
+    
+    /* Inputs */
+    input, textarea, select {
+        border-radius: 8px !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    input:focus, textarea:focus, select:focus {
+        border-color: #0f172a !important;
+        ring: 2px solid #0f172a !important;
+    }
+    
+    /* Tabs */
+    .tabs {
+        border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 24px;
+        background: transparent;
+    }
+    .tab-nav {
+        border: none !important;
+        background: transparent !important;
+    }
+    .tab-nav button {
+        font-weight: 500;
+        color: #64748b;
+    }
+    .tab-nav button.selected {
+        color: #0f172a;
+        font-weight: 600;
+        border-bottom: 2px solid #0f172a !important;
+        background: transparent !important;
+    }
+    
+    /* Header */
+    .header-logo {
+        font-size: 24px;
+        font-weight: 700;
+        color: #0f172a;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+    .header-subtitle {
+        color: #64748b;
+        font-size: 16px;
+        font-weight: 400;
+    }
+    
+    /* Footer */
+    footer {
+        display: none !important;
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+        color: #94a3b8;
+        font-size: 0.875rem;
+    }
+    """
+    
     with gr.Blocks(
-        title="Boltz-2 Predictor",
+        title="Boltz-2",
+        # css and theme moved to launch() for Gradio 6.0 compatibility
     ) as app:
         
-        gr.Markdown("""
-        # 🧬 Boltz-2 Predictor
-        
-        **Biomolecular structure prediction made easy.** Predict 3D structures of proteins, 
-        DNA, RNA, and their complexes with small molecules.
-        """)
+        with gr.Row(elem_classes="header-container"):
+            with gr.Column(scale=1):
+                gr.HTML("""
+                <div style="padding: 24px 0;">
+                    <div class="header-logo">
+                        <span style="background: #0f172a; color: white; width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 18px;">⚡</span>
+                        Boltz-2
+                    </div>
+                    <div class="header-subtitle">
+                        Biomolecular structure prediction, simplified.
+                    </div>
+                </div>
+                """)
         
         with gr.Tabs():
             with gr.Tab("🚀 Quick Start"):
@@ -1362,10 +1369,10 @@ def create_app():
             with gr.Tab("📚 Help"):
                 create_help_tab()
         
-        gr.Markdown("""
-        ---
-        *Boltz-2 GUI v0.1.0 | [Documentation](https://github.com/jwohlwend/boltz) | 
-        MIT License*
+        gr.HTML("""
+        <div style="text-align: center; margin-top: 40px; padding: 20px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+            <p>Boltz-2 GUI v0.1.0 &middot; <a href="https://github.com/jwohlwend/boltz" target="_blank" style="color: #64748b; text-decoration: none;">GitHub</a> &middot; MIT License</p>
+        </div>
         """)
     
     return app
@@ -1373,15 +1380,143 @@ def create_app():
 
 def main():
     """Launch the Boltz-2 GUI application."""
+    
+    # Custom CSS for that "YC Startup" look
+    yc_css = """
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    body {
+        font-family: 'Inter', sans-serif !important;
+        background-color: #f8fafc;
+    }
+    
+    .gradio-container {
+        max-width: 1200px !important;
+        margin: 0 auto;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Inter', sans-serif;
+        letter-spacing: -0.025em;
+    }
+    
+    /* Elegant Cards */
+    .block {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.01), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        background: white;
+        overflow: hidden;
+    }
+    
+    /* Clean Buttons */
+    button.primary {
+        background: #0f172a !important; /* Slate 900 */
+        color: white !important;
+        border-radius: 8px !important;
+        font-weight: 500;
+        transition: all 0.2s;
+        border: none !important;
+    }
+    button.primary:hover {
+        background: #1e293b !important; /* Slate 800 */
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    
+    button.secondary {
+        background: white !important;
+        border: 1px solid #e2e8f0 !important;
+        color: #475569 !important; /* Slate 600 */
+        border-radius: 8px !important;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    button.secondary:hover {
+        background: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+    }
+    
+    /* Inputs */
+    input, textarea, select {
+        border-radius: 8px !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    input:focus, textarea:focus, select:focus {
+        border-color: #0f172a !important;
+        ring: 2px solid #0f172a !important;
+    }
+    
+    /* Tabs */
+    .tabs {
+        border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 24px;
+        background: transparent;
+    }
+    .tab-nav {
+        border: none !important;
+        background: transparent !important;
+    }
+    .tab-nav button {
+        font-weight: 500;
+        color: #64748b;
+    }
+    .tab-nav button.selected {
+        color: #0f172a;
+        font-weight: 600;
+        border-bottom: 2px solid #0f172a !important;
+        background: transparent !important;
+    }
+    
+    /* Header */
+    .header-logo {
+        font-size: 24px;
+        font-weight: 700;
+        color: #0f172a;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+    .header-subtitle {
+        color: #64748b;
+        font-size: 16px;
+        font-weight: 400;
+    }
+    
+    /* Footer */
+    footer {
+        display: none !important;
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+        color: #94a3b8;
+        font-size: 0.875rem;
+    }
+    """
+    
+    # Using GoogleFont for Inter
+    try:
+        font = gr.themes.GoogleFont("Inter")
+    except Exception:
+        font = "Inter"  # Fallback
+        
     app = create_app()
     app.launch(
         server_name="0.0.0.0",
         server_port=7860,
         share=False,
         inbrowser=True,
+        allowed_paths=["/"],
+        css=yc_css,
         theme=gr.themes.Soft(
-            primary_hue="blue",
-            secondary_hue="gray",
+            primary_hue="slate",
+            secondary_hue="slate",
+            text_size="sm",
+            spacing_size="sm",
+            radius_size="md",
+            font=[font, 'ui-sans-serif', 'system-ui', 'sans-serif'],
         ),
     )
 
