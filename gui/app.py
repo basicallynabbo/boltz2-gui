@@ -1150,6 +1150,11 @@ def create_results_tab():
             # Parse confidence scores
             for conf_file in conf_files:
                 try:
+                    # Extract model name
+                    fname = os.path.basename(conf_file)
+                    model_label = fname.replace("confidence", "").replace(".json", "").replace("_", " ").strip().title()
+                    if not model_label: model_label = "Model 0"
+                    
                     with open(conf_file, 'r') as f:
                         conf = json.load(f)
                     
@@ -1163,7 +1168,7 @@ def create_results_tab():
                     else:
                         quality = "🔴 Low"
                     
-                    results_md += f"""### 📈 Confidence Scores
+                    results_md += f"""### 📈 Confidence Scores ({model_label})
 
 | Metric | Value | Interpretation |
 |--------|-------|----------------|
@@ -1180,13 +1185,18 @@ def create_results_tab():
             # Parse affinity scores
             for aff_file in aff_files:
                 try:
+                    # Extract model name
+                    fname = os.path.basename(aff_file)
+                    model_label = fname.replace("affinity", "").replace(".json", "").replace("_", " ").strip().title()
+                    if not model_label: model_label = "Model 0"
+                    
                     with open(aff_file, 'r') as f:
                         aff = json.load(f)
                     
                     prob = aff.get("affinity_probability_binary", 0)
                     binding = "✅ Likely binder" if prob > 0.5 else "❌ Likely non-binder"
                     
-                    results_md += f"""### 🎯 Affinity Prediction
+                    results_md += f"""### 🎯 Affinity Prediction ({model_label})
 
 | Metric | Value | Interpretation |
 |--------|-------|----------------|
