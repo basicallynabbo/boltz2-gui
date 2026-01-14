@@ -375,7 +375,11 @@ def create_input_builder_tab():
         gr.Markdown("""
         ## 🔧 Input Builder
         
-        Create YAML input files without writing code. Add sequences and export.
+        Design complex experiments including **Proteins**, **DNA/RNA**, **Ligands**, and **Affinity Predictions**.
+        
+        **Supported Workflows:**
+        * **🧬 Complex Modeling**: Add multiple Chains (Proteins, DNA, Ligands) to model their interaction.
+        * **🎯 Affinity Prediction**: Predict binding affinity (pIC50) between a Binder and Target.
         """)
         
         with gr.Row():
@@ -419,7 +423,7 @@ def create_input_builder_tab():
                 gr.Markdown("---")
                 
                 enable_affinity = gr.Checkbox(
-                    label="Enable Affinity Prediction",
+                    label="Enable Affinity / Binding Strength Prediction",
                     value=False,
                 )
                 
