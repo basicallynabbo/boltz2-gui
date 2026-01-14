@@ -1506,7 +1506,6 @@ def main():
     app = create_app()
     app.launch(
         server_name="0.0.0.0",
-        server_port=7860,
         share=False,
         inbrowser=True,
         allowed_paths=["/"],
