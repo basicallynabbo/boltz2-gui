@@ -22,7 +22,16 @@ conda create -n boltz python=3.12
 conda activate boltz
 ```
 
-### 3. Install Boltz-2
+### 3. Install PyTorch (with GPU Support)
+
+Essential for fast predictions.
+
+```bash
+# Install PyTorch with CUDA 12.4 support
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+```
+
+### 4. Install Boltz-2
 
 Install the package in editable mode:
 
@@ -30,7 +39,7 @@ Install the package in editable mode:
 pip install -e .
 ```
 
-### 4. Install GUI Requirements
+### 5. Install GUI Requirements
 
 Install Gradio for the user interface:
 
@@ -38,7 +47,7 @@ Install Gradio for the user interface:
 pip install gradio
 ```
 
-### 5. Run the GUI
+### 6. Run the GUI
 
 Launch the application:
 
