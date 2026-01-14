@@ -35,6 +35,14 @@ from .yaml_builder import (
 )
 
 
+# Global Constants
+DEFAULT_OUTPUT_DIR = os.path.expanduser("~/boltz-predictions")
+if not os.path.exists(DEFAULT_OUTPUT_DIR):
+    try:
+        os.makedirs(DEFAULT_OUTPUT_DIR)
+    except OSError:
+        pass
+
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
@@ -236,7 +244,7 @@ def create_quick_start_tab():
                 
                 output_dir = gr.Textbox(
                     label="📂 Output Directory",
-                    value="./predictions",
+                    value=DEFAULT_OUTPUT_DIR,
                     placeholder="Path to save predictions",
                 )
                 
@@ -1082,16 +1090,72 @@ def create_results_tab():
         Paste your output folder path to see confidence scores and affinity predictions.
         """)
         
+    def list_predictions():
+        """List subdirectories in default output dir."""
+        if not os.path.exists(DEFAULT_OUTPUT_DIR):
+            return []
+        
+        dirs = []
+        try:
+            # Sort by modification time (newest first)
+            entries = list(Path(DEFAULT_OUTPUT_DIR).iterdir())
+            entries.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            
+            for p in entries:
+                if p.is_dir() and not p.name.startswith("."):
+                    dirs.append(p.name)
+        except Exception:
+            pass
+        return dirs
+
+    with gr.Column():
+        gr.Markdown("""
+        ## 📊 Results Analyzer
+        
+        Select a prediction from your **boltz-predictions** folder or paste a custom path.
+        """)
+        
+        with gr.Row():
+            pred_dropdown = gr.Dropdown(
+                label="📁 Select Recent Prediction",
+                choices=list_predictions(),
+                value=None,
+                scale=4,
+                interactive=True,
+                info=f"Found in {DEFAULT_OUTPUT_DIR}"
+            )
+            refresh_btn = gr.Button("🔄 Refresh", scale=1, variant="secondary")
+        
         results_dir = gr.Textbox(
-            label="📁 Output Folder Path",
+            label="... or Enter Path",
             placeholder="/path/to/your/results_directory",
-            value="",
-            info="Enter the path to the folder containing your Boltz predictions (e.g. ./predictions)",
+            value=DEFAULT_OUTPUT_DIR,
+            info="Full path to the folder containing predictions",
         )
         
         analyze_btn = gr.Button("🔍 Analyze Results", variant="primary", size="lg")
         
-        results_output = gr.Markdown("*Paste your output folder path and click Analyze*")
+        results_output = gr.Markdown("*Select a prediction or paste a path and click Analyze*")
+        
+        # Event Handlers for Dropdown
+        def on_dropdown_select(folder_name):
+            if not folder_name: return DEFAULT_OUTPUT_DIR
+            return os.path.join(DEFAULT_OUTPUT_DIR, folder_name)
+        
+        pred_dropdown.change(
+            fn=on_dropdown_select,
+            inputs=[pred_dropdown],
+            outputs=[results_dir]
+        )
+        
+        def refresh_list():
+            return gr.update(choices=list_predictions())
+            
+        refresh_btn.click(
+            fn=refresh_list,
+            inputs=[],
+            outputs=[pred_dropdown]
+        )
     
     def analyze_results(folder_path):
         """Analyze prediction results from a folder."""
