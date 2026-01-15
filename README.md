@@ -88,6 +88,21 @@ Need to run 100 predictions? You don't need to create YAMLs manually.
 3. Click **Convert to YAML Batch**.
 4. Download the **ZIP file**, extract it, and use the contents in **Quick Start**.
 
+### 🧬 Combinatorial Peptide-Receptor Docking
+
+Generate all combinations of peptide-receptor pairs for bulk docking experiments:
+
+1. Go to **Input Builder** > **Combinatorial Peptide-Receptor Docking**.
+2. Upload **`peptide.fasta`** containing your de novo peptide sequences.
+3. Upload **`receptor.fasta`** containing your receptor protein sequences.
+4. Click **Generate Combinatorial YAMLs**.
+5. Download the **ZIP file** containing N×M YAML files (N peptides × M receptors).
+
+**Example:** 10 peptides × 5 receptors = 50 YAML files, each with:
+
+- Chain A = Receptor
+- Chain B = Peptide
+
 ## Tips for Beginners
 
 1. Start with the **Quick Start** tab

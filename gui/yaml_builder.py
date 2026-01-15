@@ -12,14 +12,14 @@ def create_protein_entry(
     cyclic: bool = False,
 ) -> dict:
     """Create a protein entry for the YAML file.
-    
+
     Args:
         chain_id: Unique chain identifier(s). Use list for multiple identical chains.
         sequence: Amino acid sequence.
         msa_path: Optional path to pre-computed MSA (.a3m file).
         modifications: Optional list of modifications [{position: int, ccd: str}].
         cyclic: Whether the protein is cyclic.
-    
+
     Returns:
         Dictionary representing the protein entry.
     """
@@ -29,16 +29,16 @@ def create_protein_entry(
             "sequence": sequence.upper().strip(),
         }
     }
-    
+
     if msa_path:
         entry["protein"]["msa"] = msa_path
-    
+
     if modifications:
         entry["protein"]["modifications"] = modifications
-    
+
     if cyclic:
         entry["protein"]["cyclic"] = True
-    
+
     return entry
 
 
@@ -49,13 +49,13 @@ def create_dna_entry(
     cyclic: bool = False,
 ) -> dict:
     """Create a DNA entry for the YAML file.
-    
+
     Args:
         chain_id: Unique chain identifier(s).
         sequence: Nucleotide sequence (ATCG).
         modifications: Optional list of modifications.
         cyclic: Whether the DNA is cyclic.
-    
+
     Returns:
         Dictionary representing the DNA entry.
     """
@@ -65,13 +65,13 @@ def create_dna_entry(
             "sequence": sequence.upper().strip(),
         }
     }
-    
+
     if modifications:
         entry["dna"]["modifications"] = modifications
-    
+
     if cyclic:
         entry["dna"]["cyclic"] = True
-    
+
     return entry
 
 
@@ -82,13 +82,13 @@ def create_rna_entry(
     cyclic: bool = False,
 ) -> dict:
     """Create an RNA entry for the YAML file.
-    
+
     Args:
         chain_id: Unique chain identifier(s).
         sequence: Nucleotide sequence (AUCG).
         modifications: Optional list of modifications.
         cyclic: Whether the RNA is cyclic.
-    
+
     Returns:
         Dictionary representing the RNA entry.
     """
@@ -98,13 +98,13 @@ def create_rna_entry(
             "sequence": sequence.upper().strip(),
         }
     }
-    
+
     if modifications:
         entry["rna"]["modifications"] = modifications
-    
+
     if cyclic:
         entry["rna"]["cyclic"] = True
-    
+
     return entry
 
 
@@ -114,15 +114,15 @@ def create_ligand_entry(
     ccd: Optional[str] = None,
 ) -> dict:
     """Create a ligand entry for the YAML file.
-    
+
     Args:
         chain_id: Unique chain identifier(s).
         smiles: SMILES string (mutually exclusive with ccd).
         ccd: CCD code (mutually exclusive with smiles).
-    
+
     Returns:
         Dictionary representing the ligand entry.
-    
+
     Raises:
         ValueError: If both or neither smiles and ccd are provided.
     """
@@ -130,18 +130,18 @@ def create_ligand_entry(
         raise ValueError("Provide either smiles or ccd, not both.")
     if not smiles and not ccd:
         raise ValueError("Must provide either smiles or ccd.")
-    
+
     entry = {
         "ligand": {
             "id": chain_id,
         }
     }
-    
+
     if smiles:
         entry["ligand"]["smiles"] = smiles
     else:
         entry["ligand"]["ccd"] = ccd
-    
+
     return entry
 
 
@@ -154,7 +154,7 @@ def create_bond_constraint(
     atom2_name: str,
 ) -> dict:
     """Create a covalent bond constraint.
-    
+
     Args:
         atom1_chain: Chain ID of first atom.
         atom1_residue: Residue index (1-indexed) of first atom.
@@ -162,7 +162,7 @@ def create_bond_constraint(
         atom2_chain: Chain ID of second atom.
         atom2_residue: Residue index (1-indexed) of second atom.
         atom2_name: Atom name of second atom.
-    
+
     Returns:
         Dictionary representing the bond constraint.
     """
@@ -181,13 +181,13 @@ def create_pocket_constraint(
     force: bool = False,
 ) -> dict:
     """Create a pocket (binding site) constraint.
-    
+
     Args:
         binder_chain: Chain ID of the binder molecule.
         contacts: List of (chain_id, residue_index or atom_name) tuples.
         max_distance: Maximum distance in Angstroms (4-20, default 6).
         force: Whether to enforce with a potential.
-    
+
     Returns:
         Dictionary representing the pocket constraint.
     """
@@ -197,13 +197,13 @@ def create_pocket_constraint(
             "contacts": [list(c) for c in contacts],
         }
     }
-    
+
     if max_distance != 6.0:
         constraint["pocket"]["max_distance"] = max_distance
-    
+
     if force:
         constraint["pocket"]["force"] = True
-    
+
     return constraint
 
 
@@ -216,7 +216,7 @@ def create_contact_constraint(
     force: bool = False,
 ) -> dict:
     """Create a contact constraint between two residues/atoms.
-    
+
     Args:
         token1_chain: Chain ID of first token.
         token1_residue: Residue index or atom name of first token.
@@ -224,7 +224,7 @@ def create_contact_constraint(
         token2_residue: Residue index or atom name of second token.
         max_distance: Maximum distance in Angstroms (4-20, default 6).
         force: Whether to enforce with a potential.
-    
+
     Returns:
         Dictionary representing the contact constraint.
     """
@@ -234,22 +234,22 @@ def create_contact_constraint(
             "token2": [token2_chain, token2_residue],
         }
     }
-    
+
     if max_distance != 6.0:
         constraint["contact"]["max_distance"] = max_distance
-    
+
     if force:
         constraint["contact"]["force"] = True
-    
+
     return constraint
 
 
 def create_affinity_property(binder_chain: str) -> dict:
     """Create an affinity property specification.
-    
+
     Args:
         binder_chain: Chain ID of the ligand for affinity calculation.
-    
+
     Returns:
         Dictionary representing the affinity property.
     """
@@ -268,14 +268,14 @@ def build_yaml(
     version: int = 1,
 ) -> str:
     """Build a complete YAML input file.
-    
+
     Args:
         sequences: List of sequence entries (protein, dna, rna, ligand).
         constraints: Optional list of constraints (bond, pocket, contact).
         templates: Optional list of template specifications.
         properties: Optional list of property specifications (e.g., affinity).
         version: YAML format version (default 1).
-    
+
     Returns:
         YAML string ready to be saved to a file.
     """
@@ -283,99 +283,196 @@ def build_yaml(
         "version": version,
         "sequences": sequences,
     }
-    
+
     if constraints:
         data["constraints"] = constraints
-    
+
     if templates:
         data["templates"] = templates
-    
+
     if properties:
         data["properties"] = properties
-    
-    return yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+    return yaml.dump(
+        data, default_flow_style=False, sort_keys=False, allow_unicode=True
+    )
 
 
 def validate_protein_sequence(sequence: str) -> tuple[bool, str]:
     """Validate a protein sequence.
-    
+
     Args:
         sequence: Amino acid sequence to validate.
-    
+
     Returns:
         Tuple of (is_valid, error_message).
     """
     valid_aa = set("ACDEFGHIKLMNPQRSTVWY")
     sequence = sequence.upper().strip()
-    
+
     if not sequence:
         return False, "Sequence cannot be empty."
-    
+
     invalid_chars = set(sequence) - valid_aa
     if invalid_chars:
         return False, f"Invalid amino acids: {', '.join(sorted(invalid_chars))}"
-    
+
     return True, ""
 
 
 def validate_dna_sequence(sequence: str) -> tuple[bool, str]:
     """Validate a DNA sequence.
-    
+
     Args:
         sequence: Nucleotide sequence to validate.
-    
+
     Returns:
         Tuple of (is_valid, error_message).
     """
     valid_bases = set("ATCG")
     sequence = sequence.upper().strip()
-    
+
     if not sequence:
         return False, "Sequence cannot be empty."
-    
+
     invalid_chars = set(sequence) - valid_bases
     if invalid_chars:
         return False, f"Invalid nucleotides: {', '.join(sorted(invalid_chars))}"
-    
+
     return True, ""
 
 
 def validate_rna_sequence(sequence: str) -> tuple[bool, str]:
     """Validate an RNA sequence.
-    
+
     Args:
         sequence: Nucleotide sequence to validate.
-    
+
     Returns:
         Tuple of (is_valid, error_message).
     """
     valid_bases = set("AUCG")
     sequence = sequence.upper().strip()
-    
+
     if not sequence:
         return False, "Sequence cannot be empty."
-    
+
     invalid_chars = set(sequence) - valid_bases
     if invalid_chars:
         return False, f"Invalid nucleotides: {', '.join(sorted(invalid_chars))}"
-    
+
     return True, ""
 
 
 def validate_chain_id(chain_id: str, existing_ids: set[str]) -> tuple[bool, str]:
     """Validate a chain ID.
-    
+
     Args:
         chain_id: Chain identifier to validate.
         existing_ids: Set of already used chain IDs.
-    
+
     Returns:
         Tuple of (is_valid, error_message).
     """
     if not chain_id:
         return False, "Chain ID cannot be empty."
-    
+
     if chain_id in existing_ids:
         return False, f"Chain ID '{chain_id}' is already in use."
-    
+
     return True, ""
+
+
+def convert_combinatorial_fasta(
+    peptide_fasta_path: str,
+    receptor_fasta_path: str,
+    enable_affinity: bool = False,
+) -> str:
+    """Convert two FASTA files into combinatorial YAML files.
+
+    Generates N×M YAML files where each peptide is paired with each receptor.
+    Chain A = Receptor, Chain B = Peptide.
+
+    Args:
+        peptide_fasta_path: Path to FASTA file containing peptide sequences
+        receptor_fasta_path: Path to FASTA file containing receptor sequences
+        enable_affinity: If True, add affinity properties with peptide as binder
+
+    Returns:
+        Path to ZIP file containing all generated YAML files
+    """
+    import tempfile
+    import zipfile
+    from pathlib import Path
+
+    def parse_fasta(fasta_path: str) -> list[tuple[str, str]]:
+        """Parse FASTA file and return list of (id, sequence) tuples."""
+        content = Path(fasta_path).read_text()
+        entries = []
+        current_header = None
+        current_seq = []
+
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if current_header:
+                    clean_id = current_header.split()[0][:50]  # Limit ID length
+                    clean_seq = "".join(current_seq)
+                    entries.append((clean_id, clean_seq))
+                current_header = line[1:]
+                current_seq = []
+            else:
+                current_seq.append(line)
+
+        # Save last entry
+        if current_header:
+            clean_id = current_header.split()[0][:50]
+            clean_seq = "".join(current_seq)
+            entries.append((clean_id, clean_seq))
+
+        return entries
+
+    # Parse both FASTA files
+    peptides = parse_fasta(peptide_fasta_path)
+    receptors = parse_fasta(receptor_fasta_path)
+
+    if not peptides:
+        raise ValueError("No peptide sequences found in peptide FASTA file")
+    if not receptors:
+        raise ValueError("No receptor sequences found in receptor FASTA file")
+
+    # Create temp directory for YAML files
+    tmp_dir = Path(tempfile.mkdtemp(prefix="boltz_combinatorial_"))
+    yaml_dir = tmp_dir / "yamls"
+    yaml_dir.mkdir()
+
+    # Generate all combinations
+    for peptide_id, peptide_seq in peptides:
+        for receptor_id, receptor_seq in receptors:
+            # Create YAML with Receptor=A, Peptide=B
+            receptor_entry = create_protein_entry("A", receptor_seq)
+            peptide_entry = create_protein_entry("B", peptide_seq)
+
+            # Add affinity properties if enabled
+            properties = None
+            if enable_affinity:
+                properties = [create_affinity_property("B")]  # B = Peptide binder
+
+            yaml_content = build_yaml(
+                [receptor_entry, peptide_entry], properties=properties
+            )
+
+            # Save YAML file
+            filename = f"{peptide_id}_{receptor_id}.yaml"
+            out_path = yaml_dir / filename
+            out_path.write_text(yaml_content)
+
+    # Create ZIP file
+    zip_path = tmp_dir / "combinatorial_yamls.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for yaml_file in yaml_dir.glob("*.yaml"):
+            zf.write(yaml_file, yaml_file.name)
+
+    return str(zip_path)
