@@ -141,7 +141,15 @@ You can run predictions on multiple structures at once:
 2. Give the batch a **job name**.
 3. Click **Add to Queue**.
 
-The GUI will automatically process all files as a single batch job.
+### ⚡ Auto-Split for Large Batches
+
+Batches with **more than 30 files** are automatically split into smaller jobs:
+
+- Upload 100 files with name `my_study`
+- GUI creates: `my_study_part1`, `my_study_part2`, `my_study_part3`, etc.
+- **All results go to the same folder:** `~/boltz-predictions/my_study/`
+
+This helps avoid MSA server rate limiting for large experiments.
 
 ### 🛠️ Batch Input Generation
 
