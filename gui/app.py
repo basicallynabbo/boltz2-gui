@@ -159,54 +159,100 @@ def get_boltz_command(
     return cmd
 
 
-class PredictionRunner:
-    """Manages running predictions in a background thread."""
+class Job:
+    """Represents a single prediction job."""
+    def __init__(self, name: str, input_path: str, output_dir: str, cmd: list[str]):
+        self.name = name
+        self.input_path = input_path
+        self.output_dir = output_dir
+        self.cmd = cmd
+        self.status = "queued"  # queued, running, completed, failed
+        self.log = ""
+        self.created_at = datetime.now()
+
+
+class JobQueue:
+    """Manages a queue of prediction jobs, running them sequentially."""
 
     def __init__(self):
+        self.jobs: list[Job] = []
+        self.current_job: Job = None
         self.process = None
         self.output_queue = queue.Queue()
         self.is_running = False
         self.thread = None
+        self._lock = threading.Lock()
 
-    def run(self, cmd: list[str], env: dict = None):
-        """Start a prediction in a background thread."""
+    def add_job(self, name: str, input_path: str, output_dir: str, settings: dict) -> Job:
+        """Add a new job to the queue."""
+        cmd = get_boltz_command(input_path, output_dir, settings)
+        job = Job(name, input_path, output_dir, cmd)
+        
+        with self._lock:
+            self.jobs.append(job)
+        
+        # Start processing if not already running
+        if not self.is_running:
+            self._start_processing()
+        
+        return job
+
+    def _start_processing(self):
+        """Start the background thread to process jobs."""
         self.is_running = True
-        self.thread = threading.Thread(target=self._run_process, args=(cmd, env))
+        self.thread = threading.Thread(target=self._process_queue, daemon=True)
         self.thread.start()
 
-    def _run_process(self, cmd: list[str], env: dict = None):
-        """Run the prediction process."""
-        try:
-            process_env = os.environ.copy()
-            if env:
-                process_env.update(env)
-
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=process_env,
-            )
-
-            for line in iter(self.process.stdout.readline, ""):
-                self.output_queue.put(line)
-
-            self.process.wait()
-
-            if self.process.returncode == 0:
-                self.output_queue.put("\n✅ Prediction completed successfully!\n")
-            else:
-                self.output_queue.put(
-                    f"\n❌ Prediction failed with exit code {self.process.returncode}\n"
+    def _process_queue(self):
+        """Process jobs in the queue one by one."""
+        while True:
+            job = self._get_next_job()
+            if job is None:
+                self.is_running = False
+                break
+            
+            self.current_job = job
+            job.status = "running"
+            self.output_queue.put(f"▶️ Starting job: {job.name}\n")
+            self.output_queue.put(f"$ {' '.join(job.cmd)}\n\n")
+            
+            try:
+                self.process = subprocess.Popen(
+                    job.cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
                 )
+                
+                for line in iter(self.process.stdout.readline, ""):
+                    self.output_queue.put(line)
+                    job.log += line
+                
+                self.process.wait()
+                
+                if self.process.returncode == 0:
+                    job.status = "completed"
+                    self.output_queue.put(f"\n✅ Job '{job.name}' completed successfully!\n\n")
+                else:
+                    job.status = "failed"
+                    self.output_queue.put(f"\n❌ Job '{job.name}' failed with exit code {self.process.returncode}\n\n")
+            
+            except Exception as e:
+                job.status = "failed"
+                self.output_queue.put(f"\n❌ Job '{job.name}' error: {str(e)}\n\n")
+            
+            finally:
+                self.current_job = None
+                self.process = None
 
-        except Exception as e:
-            self.output_queue.put(f"\n❌ Error: {str(e)}\n")
-
-        finally:
-            self.is_running = False
+    def _get_next_job(self) -> Job:
+        """Get the next queued job."""
+        with self._lock:
+            for job in self.jobs:
+                if job.status == "queued":
+                    return job
+        return None
 
     def get_output(self) -> str:
         """Get all available output from the queue."""
@@ -218,15 +264,44 @@ class PredictionRunner:
                 break
         return "".join(output)
 
-    def stop(self):
-        """Stop the running prediction."""
-        if self.process and self.is_running:
+    def stop_current(self):
+        """Stop the currently running job."""
+        if self.process and self.current_job:
             self.process.terminate()
-            self.is_running = False
+            self.current_job.status = "failed"
+            self.output_queue.put(f"\n⏹️ Job '{self.current_job.name}' stopped by user\n\n")
+
+    def remove_job(self, job_name: str):
+        """Remove a queued job by name."""
+        with self._lock:
+            self.jobs = [j for j in self.jobs if not (j.name == job_name and j.status == "queued")]
+
+    def get_queue_status(self) -> str:
+        """Get a formatted string of the queue status."""
+        if not self.jobs:
+            return "📋 Queue is empty. Add jobs to start predicting!"
+        
+        lines = []
+        for job in self.jobs:
+            if job.status == "running":
+                lines.append(f"▶️ **{job.name}** - Running...")
+            elif job.status == "queued":
+                lines.append(f"⏳ {job.name} - Queued")
+            elif job.status == "completed":
+                lines.append(f"✅ {job.name} - Completed")
+            elif job.status == "failed":
+                lines.append(f"❌ {job.name} - Failed")
+        
+        return "\n".join(lines)
+
+    def clear_completed(self):
+        """Clear completed and failed jobs from the list."""
+        with self._lock:
+            self.jobs = [j for j in self.jobs if j.status in ("queued", "running")]
 
 
-# Global runner instance
-runner = PredictionRunner()
+# Global job queue instance
+job_queue = JobQueue()
 
 
 # ============================================================================
@@ -235,198 +310,154 @@ runner = PredictionRunner()
 
 
 def create_quick_start_tab():
-    """Create the Quick Start tab for beginners."""
+    """Create the simplified Quick Start tab with job queue."""
 
     with gr.Column():
         gr.Markdown("""
-        ## 🚀 Quick Start
+        ## 🚀 Boltz-2 Predictions
         
-        Get started in 3 easy steps:
-        1. **Upload** your input file (YAML or FASTA)
-        2. **Choose** your output directory  
-        3. **Click Run!**
+        **Simple workflow:** Upload → Name → Add to Queue
+        
+        Uses Boltz recommended settings (MSA + Potentials enabled).
         """)
 
         with gr.Row():
             with gr.Column(scale=2):
                 input_file = gr.File(
-                    label="📁 Input File(s) - Drag multiple for Batch Mode",
+                    label="📁 Input File(s)",
                     file_types=[".yaml", ".yml", ".fasta", ".fa"],
                     type="filepath",
                     file_count="multiple",
                 )
 
-                output_dir = gr.Textbox(
-                    label="📂 Output Directory",
-                    value=DEFAULT_OUTPUT_DIR,
-                    placeholder="Path to save predictions",
+                job_name = gr.Textbox(
+                    label="📝 Job Name",
+                    value="",
+                    placeholder="e.g., protein_binding_study",
+                    info="Name for this prediction run (required)",
                 )
 
-                with gr.Row():
-                    use_msa = gr.Checkbox(
-                        label="🌐 Use MSA Server",
-                        value=True,
-                        info="Auto-generate sequence alignments (recommended)",
-                    )
-                    use_potentials = gr.Checkbox(
-                        label="⚡ Use Potentials",
-                        value=True,
-                        info="Improve physical quality of structures (recommended)",
-                    )
-
-                preset_dropdown = gr.Dropdown(
-                    choices=[
-                        ("⚡ Fast - Quick test (1 rec, 50 samp, 1 diff)", "fast"),
-                        (
-                            "⚖️ Balanced - Boltz Recommended (3 rec, 200 samp, 1 diff)",
-                            "balanced",
-                        ),
-                        (
-                            "🎯 High Quality - Recommended + Robust (3 rec, 200 samp, 5 diff)",
-                            "high_quality",
-                        ),
-                        (
-                            "🔬 AlphaFold3-like - Deep sampling (10 rec, 200 samp, 25 diff)",
-                            "alphafold3_like",
-                        ),
-                    ],
-                    value="balanced",
-                    label="🎚️ Quality Preset",
-                    info="Choose between speed and accuracy",
-                )
-
-                run_button = gr.Button(
-                    "🚀 Run Prediction",
+                add_button = gr.Button(
+                    "➕ Add to Queue",
                     variant="primary",
                     size="lg",
                 )
 
-                stop_button = gr.Button(
-                    "⏹️ Stop",
-                    variant="stop",
-                    visible=False,
-                )
+                with gr.Row():
+                    stop_button = gr.Button("⏹️ Stop Current", variant="stop", size="sm")
+                    clear_button = gr.Button("🗑️ Clear Completed", size="sm")
 
             with gr.Column(scale=1):
-                gr.Markdown("""
-                ### 💡 Tips for Beginners
-                
-                - **Upload multiple files** to run a batch job
-                - **YAML format** is recommended over FASTA
-                - Enable **MSA Server** for automatic alignments
-                - **Potentials** improve structure quality
-                - Start with **Balanced** preset
-                - Check **Help** tab for examples
-                """)
-
-        status_text = gr.Markdown("**Status:** Ready")
+                gr.Markdown("### 📋 Job Queue")
+                queue_status = gr.Markdown("📋 Queue is empty. Add jobs to start predicting!")
 
         output_log = gr.Textbox(
             label="📋 Output Log",
-            lines=15,
-            max_lines=30,
+            lines=12,
+            max_lines=25,
             interactive=False,
         )
 
-        # Add timer for updating output
-        timer = gr.Timer(value=1, active=False)
+        # Timer for updating UI
+        timer = gr.Timer(value=1, active=True)
 
-    def run_prediction(input_files, output_dir, use_msa, use_potentials, preset):
-        """Run a prediction with Quick Start settings."""
+    def add_to_queue(input_files, name):
+        """Add a job to the queue."""
         if not input_files:
             return (
-                "**Status:** ❌ Please upload input file(s)",
-                "",
-                gr.update(active=False),
+                job_queue.get_queue_status(),
+                "❌ Please upload input file(s)",
+                gr.update(),
+                gr.update(),  # Keep input files
             )
-
-        # Handle Batch Processing
-        import os
+        
+        if not name or not name.strip():
+            return (
+                job_queue.get_queue_status(),
+                "❌ Please enter a job name",
+                gr.update(),
+                gr.update(),  # Keep input files
+            )
+        
+        # Sanitize job name
+        clean_name = name.strip().replace(" ", "_")
+        
+        # Handle multiple files (batch)
         import shutil
         import tempfile
-
-        target_input = ""
-        is_batch = False
-        batch_msg = ""
-
-        # Check if input_files is a list (Batch Mode) or single string
-        if isinstance(input_files, list):
-            if len(input_files) == 1:
-                target_input = input_files[0]
-            else:
-                is_batch = True
-                # Create a temporary directory for the batch
-                batch_dir = tempfile.mkdtemp(prefix="boltz_batch_")
-                for fpath in input_files:
-                    try:
-                        shutil.copy(fpath, batch_dir)
-                    except Exception as e:
-                        print(f"Error copying {fpath}: {e}")
-
-                target_input = batch_dir
-                batch_msg = f" (Batch of {len(input_files)} inputs)"
+        
+        if isinstance(input_files, list) and len(input_files) > 1:
+            # Create batch directory
+            batch_dir = tempfile.mkdtemp(prefix="boltz_batch_")
+            for fpath in input_files:
+                try:
+                    shutil.copy(fpath, batch_dir)
+                except Exception as e:
+                    print(f"Error copying {fpath}: {e}")
+            target_input = batch_dir
         else:
-            target_input = input_files
-
-        # Get preset settings
-        preset_settings = PRESETS.get(preset, PRESETS["balanced"])["settings"].copy()
-
-        # Override with user choices
-        preset_settings["use_msa_server"] = use_msa
-        preset_settings["use_potentials"] = use_potentials
-
-        # Add defaults for other settings
-        for key, value in DEFAULTS.items():
-            if key not in preset_settings:
-                preset_settings[key] = value
-
-        # Build command
-        cmd = get_boltz_command(target_input, output_dir, preset_settings)
-
-        # Start prediction
-        runner.run(cmd)
-
-        cmd_str = " ".join(cmd)
+            target_input = input_files[0] if isinstance(input_files, list) else input_files
+        
+        # Use Boltz recommended settings (balanced preset)
+        settings = DEFAULTS.copy()
+        settings.update(PRESETS["balanced"]["settings"])
+        settings["use_msa_server"] = True
+        settings["use_potentials"] = True
+        
+        # Output directory
+        output_dir = os.path.join(DEFAULT_OUTPUT_DIR, clean_name)
+        
+        # Add to queue
+        job_queue.add_job(clean_name, target_input, output_dir, settings)
+        
         return (
-            f"**Status:** 🔄 Running{batch_msg}...",
-            f"$ {cmd_str}\n\n",
-            gr.update(active=True),
+            job_queue.get_queue_status(),
+            f"✅ Added '{clean_name}' to queue",
+            gr.update(value=""),  # Clear job name input
+            gr.update(value=None),  # Clear input files
         )
 
-    def update_output(current_log):
-        """Update the output log with new content."""
-        new_output = runner.get_output()
+    def update_ui(current_log):
+        """Update the output log and queue status."""
+        new_output = job_queue.get_output()
         if new_output:
             current_log = current_log + new_output
+        
+        return current_log, job_queue.get_queue_status()
 
-        if not runner.is_running:
-            return current_log, "**Status:** ✅ Complete", gr.update(active=False)
+    def stop_current():
+        """Stop the currently running job."""
+        job_queue.stop_current()
+        return job_queue.get_queue_status()
 
-        return current_log, "**Status:** 🔄 Running...", gr.update(active=True)
+    def clear_completed():
+        """Clear completed jobs from the queue."""
+        job_queue.clear_completed()
+        return job_queue.get_queue_status()
 
-    def stop_prediction():
-        """Stop the running prediction."""
-        runner.stop()
-        return "**Status:** ⏹️ Stopped", gr.update(active=False)
-
-    run_button.click(
-        fn=run_prediction,
-        inputs=[input_file, output_dir, use_msa, use_potentials, preset_dropdown],
-        outputs=[status_text, output_log, timer],
+    add_button.click(
+        fn=add_to_queue,
+        inputs=[input_file, job_name],
+        outputs=[queue_status, output_log, job_name, input_file],
     )
 
     timer.tick(
-        fn=update_output,
+        fn=update_ui,
         inputs=[output_log],
-        outputs=[output_log, status_text, timer],
+        outputs=[output_log, queue_status],
     )
 
     stop_button.click(
-        fn=stop_prediction,
-        outputs=[status_text, timer],
+        fn=stop_current,
+        outputs=[queue_status],
     )
 
-    return input_file, output_dir
+    clear_button.click(
+        fn=clear_completed,
+        outputs=[queue_status],
+    )
+
+    return input_file
 
 
 # ============================================================================
@@ -1282,11 +1313,15 @@ def create_results_tab():
             info="Full path to the folder containing predictions",
         )
 
-        analyze_btn = gr.Button("🔍 Analyze Results", variant="primary", size="lg")
+        with gr.Row():
+            analyze_btn = gr.Button("🔍 Analyze Results", variant="primary", size="lg")
+            export_btn = gr.Button("📥 Export to CSV", variant="secondary", size="lg")
 
         results_output = gr.Markdown(
             "*Select a prediction or paste a path and click Analyze*"
         )
+        
+        export_file = gr.File(label="📥 Download CSV", visible=False)
 
         # Event Handlers for Dropdown
         def on_dropdown_select(folder_name):
@@ -1442,10 +1477,112 @@ def create_results_tab():
 
         return f"# ✅ Found {prediction_count} prediction(s)\n" + results_md
 
+    def export_to_csv(folder_path):
+        """Export all results to a CSV file for pandas/matplotlib analysis."""
+        import os
+        import json
+        import glob
+        import csv
+        import tempfile
+
+        if not folder_path:
+            return gr.update(visible=False)
+
+        folder_path = os.path.expanduser(folder_path)
+        if not os.path.exists(folder_path):
+            return gr.update(visible=False)
+
+        # Look for predictions folder
+        predictions_path = os.path.join(folder_path, "predictions")
+        if os.path.exists(predictions_path):
+            search_path = predictions_path
+        else:
+            search_path = folder_path
+
+        # Collect all data
+        rows = []
+        
+        # Check subdirectories
+        dirs_to_check = []
+        if os.path.isdir(search_path):
+            for item in os.listdir(search_path):
+                item_path = os.path.join(search_path, item)
+                if os.path.isdir(item_path):
+                    dirs_to_check.append((item, item_path))
+
+        if not dirs_to_check:
+            dirs_to_check = [(os.path.basename(search_path), search_path)]
+
+        for pred_name, pred_path in dirs_to_check:
+            conf_files = glob.glob(os.path.join(pred_path, "confidence_*.json"))
+            aff_files = glob.glob(os.path.join(pred_path, "affinity_*.json"))
+
+            if not conf_files and not aff_files:
+                continue
+
+            # Parse confidence
+            for conf_file in conf_files:
+                try:
+                    fname = os.path.basename(conf_file)
+                    model_id = fname.replace("confidence_", "").replace(".json", "")
+                    
+                    with open(conf_file, "r") as f:
+                        conf = json.load(f)
+
+                    row = {
+                        "prediction_name": pred_name,
+                        "model_id": model_id,
+                        "confidence_score": conf.get("confidence_score", 0),
+                        "plddt": conf.get("complex_plddt", 0),
+                        "ptm": conf.get("ptm", 0),
+                        "iptm": conf.get("iptm", 0),
+                        "ligand_iptm": conf.get("ligand_iptm", 0),
+                        "binding_probability": None,
+                        "affinity_pIC50": None,
+                    }
+
+                    # Try to find matching affinity file
+                    aff_file = os.path.join(pred_path, f"affinity_{model_id}.json")
+                    if os.path.exists(aff_file):
+                        with open(aff_file, "r") as f:
+                            aff = json.load(f)
+                        row["binding_probability"] = aff.get("affinity_probability_binary", 0)
+                        row["affinity_pIC50"] = aff.get("affinity_pred_value", 0)
+
+                    rows.append(row)
+                except Exception:
+                    pass
+
+        if not rows:
+            return gr.update(visible=False)
+
+        # Write CSV
+        csv_path = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, prefix="boltz_results_"
+        )
+        
+        fieldnames = [
+            "prediction_name", "model_id", "confidence_score", "plddt", 
+            "ptm", "iptm", "ligand_iptm", "binding_probability", "affinity_pIC50"
+        ]
+        
+        writer = csv.DictWriter(csv_path, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+        csv_path.close()
+
+        return gr.update(value=csv_path.name, visible=True)
+
     analyze_btn.click(
         fn=analyze_results,
         inputs=[results_dir],
         outputs=[results_output],
+    )
+
+    export_btn.click(
+        fn=export_to_csv,
+        inputs=[results_dir],
+        outputs=[export_file],
     )
 
     return results_dir

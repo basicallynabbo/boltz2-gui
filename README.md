@@ -52,6 +52,7 @@ pip install gradio
 Launch the application:
 
 ```bash
+conda activate boltz
 python run_gui.py
 ```
 
@@ -59,25 +60,88 @@ The GUI will automatically open in your browser at `http://localhost:7860`.
 
 ---
 
+## 🚀 Quick Start - Job Queue
+
+The GUI uses a **simple job queue system**:
+
+1. **Upload** your YAML or FASTA file(s)
+2. **Name** your job (e.g., `protein_binding_study`)
+3. **Add to Queue** - jobs run automatically one-by-one
+
+### Why a Queue?
+
+- **Run multiple experiments** without waiting
+- **Each job gets its own folder** at `~/boltz-predictions/{job_name}/`
+- **Jobs run sequentially** (GPU handles one at a time)
+- **Queue your next jobs** while one is running
+
+### Default Settings
+
+The GUI uses **Boltz recommended settings** automatically:
+
+- ✅ MSA Server enabled (auto-generates alignments)
+- ✅ Potentials enabled (better structure quality)
+- ✅ Balanced preset (3 recycling, 200 sampling steps)
+
+---
+
 ## Features
 
 | Tab | Description |
 |-----|-------------|
-| 🚀 **Quick Start** | Upload file → Select preset → Click Run! |
+| 🚀 **Quick Start** | Upload → Name → Add to Queue |
 | 🔧 **Input Builder** | Create YAML files visually without coding |
 | ⚙️ **Advanced Settings** | Access all 25+ prediction parameters |
-| 📊 **Results** | Analyze confidence scores and affinity from any folder |
+| 📊 **Results** | Analyze scores + **Export to CSV** for pandas/matplotlib |
 | 📚 **Help** | Documentation, examples, troubleshooting |
+
+---
+
+## 📊 Results & CSV Export
+
+Analyze your predictions and export data for further analysis:
+
+1. Go to the **Results** tab
+2. Select a prediction folder
+3. Click **"🔍 Analyze Results"** to see scores
+4. Click **"📥 Export to CSV"** to download data
+
+### CSV Columns
+
+| Column | Description |
+|--------|-------------|
+| `prediction_name` | Name of the prediction |
+| `model_id` | Model number |
+| `confidence_score` | Overall confidence |
+| `plddt` | Per-residue confidence |
+| `ptm` | Fold accuracy |
+| `iptm` | Interface accuracy |
+| `ligand_iptm` | Protein-ligand interface |
+| `binding_probability` | Affinity probability |
+| `affinity_pIC50` | Binding strength |
+
+### Example with Pandas
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv("boltz_results_xxx.csv")
+df.plot(x="prediction_name", y="confidence_score", kind="bar")
+plt.show()
+```
+
+---
 
 ## 🔥 Batch Processing
 
 You can run predictions on multiple structures at once:
 
-1. Go to the **Quick Start** tab.
-2. Drag & Drop **multiple YAML or FASTA files** (e.g., 50 files) into the upload box.
-3. Click **Run Prediction**.
+1. Drag & Drop **multiple YAML or FASTA files** into the upload box.
+2. Give the batch a **job name**.
+3. Click **Add to Queue**.
 
-The GUI will automatically create a batch job and process all files sequentially.
+The GUI will automatically process all files as a single batch job.
 
 ### 🛠️ Batch Input Generation
 
@@ -102,30 +166,6 @@ Generate all combinations of peptide-receptor pairs for bulk docking experiments
 
 - Chain A = Receptor
 - Chain B = Peptide
-
-## Tips for Beginners
-
-1. Start with the **Quick Start** tab
-2. Enable **"Use MSA Server"** for automatic sequence alignments
-3. Enable **"Use Potentials"** for better structure quality
-4. Use the **"Balanced"** preset for most cases
-
-## Technical Details: Quality Presets
-
-The GUI provides four carefully tuned presets for different use cases:
-
-| Preset | Description | Recycling Loop | Diffusion Samples | Sampling Steps | Step Scale |
-|--------|-------------|----------------|-------------------|----------------|------------|
-| **⚡ Fast** | Quick sanity checks | 1 | 1 | 50 | 1.638 |
-| **⚖️ Balanced** | **Boltz Recommended** Defaults | 3 | 1 | 200 | 1.638 |
-| **🎯 High Quality** | Recommended settings with **5x more samples** | 3 | 5 | 200 | 1.638 |
-| **🔬 AlphaFold3-like** | Heavy sampling (mimics AF3 params) | 10 | 25 | 200 | 1.638 |
-
-**Notes:**
-
-- **Step Scale 1.638**: The officially recommended temperature for diffusion sampling.
-- **Balanced**: Uses the exact default parameters recommended by the Boltz authors.
-- **High Quality**: Increases robustness by generating 5 distinct diffusion samples and picking the best one (by confidence), without changing the underlying model parameters.
 
 ## Stopping the GUI
 
