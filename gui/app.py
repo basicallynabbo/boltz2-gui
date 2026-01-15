@@ -356,6 +356,7 @@ def create_quick_start_tab():
             lines=12,
             max_lines=25,
             interactive=False,
+            autoscroll=True,  # Scroll to bottom on new content, but don't reset user scroll
         )
 
         # Timer for updating UI
@@ -382,21 +383,9 @@ def create_quick_start_tab():
         # Sanitize job name
         clean_name = name.strip().replace(" ", "_")
         
-        # Handle multiple files (batch)
+        # Handle multiple files (batch) with auto-split for large batches
         import shutil
         import tempfile
-        
-        if isinstance(input_files, list) and len(input_files) > 1:
-            # Create batch directory
-            batch_dir = tempfile.mkdtemp(prefix="boltz_batch_")
-            for fpath in input_files:
-                try:
-                    shutil.copy(fpath, batch_dir)
-                except Exception as e:
-                    print(f"Error copying {fpath}: {e}")
-            target_input = batch_dir
-        else:
-            target_input = input_files[0] if isinstance(input_files, list) else input_files
         
         # Use Boltz recommended settings (balanced preset)
         settings = DEFAULTS.copy()
@@ -404,10 +393,59 @@ def create_quick_start_tab():
         settings["use_msa_server"] = True
         settings["use_potentials"] = True
         
-        # Output directory
+        # Output directory - same for all sub-jobs
         output_dir = os.path.join(DEFAULT_OUTPUT_DIR, clean_name)
         
-        # Add to queue
+        # Constants for batch splitting
+        BATCH_SPLIT_SIZE = 30  # Split batches larger than this
+        
+        file_list = input_files if isinstance(input_files, list) else [input_files]
+        num_files = len(file_list)
+        
+        if num_files > BATCH_SPLIT_SIZE:
+            # Auto-split into chunks of BATCH_SPLIT_SIZE
+            num_chunks = (num_files + BATCH_SPLIT_SIZE - 1) // BATCH_SPLIT_SIZE
+            jobs_added = 0
+            
+            for i in range(num_chunks):
+                start_idx = i * BATCH_SPLIT_SIZE
+                end_idx = min((i + 1) * BATCH_SPLIT_SIZE, num_files)
+                chunk_files = file_list[start_idx:end_idx]
+                
+                # Create temp directory for this chunk
+                batch_dir = tempfile.mkdtemp(prefix=f"boltz_batch_{i+1}_")
+                for fpath in chunk_files:
+                    try:
+                        shutil.copy(fpath, batch_dir)
+                    except Exception as e:
+                        print(f"Error copying {fpath}: {e}")
+                
+                # Add job with part number in name
+                job_name = f"{clean_name}_part{i+1}"
+                job_queue.add_job(job_name, batch_dir, output_dir, settings)
+                jobs_added += 1
+            
+            return (
+                job_queue.get_queue_status(),
+                f"✅ Auto-split {num_files} files into {jobs_added} jobs of ~{BATCH_SPLIT_SIZE} each",
+                gr.update(value=""),
+                gr.update(value=None),
+            )
+        
+        elif num_files > 1:
+            # Normal batch (small enough, no split needed)
+            batch_dir = tempfile.mkdtemp(prefix="boltz_batch_")
+            for fpath in file_list:
+                try:
+                    shutil.copy(fpath, batch_dir)
+                except Exception as e:
+                    print(f"Error copying {fpath}: {e}")
+            target_input = batch_dir
+        else:
+            # Single file
+            target_input = file_list[0]
+        
+        # Add single job to queue
         job_queue.add_job(clean_name, target_input, output_dir, settings)
         
         return (
